@@ -18,6 +18,20 @@ import {
 import { api } from '../services/api';
 
 export default function DiagnosisResult({ result, onReset, onSaveToGarden, onNavigateToGarden }) {
+  if (!result) {
+    return (
+      <div className="max-w-md mx-auto bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-4 shadow-sm">
+        <p className="text-slate-600 text-sm">No diagnosis result to display.</p>
+        <button
+          onClick={onReset}
+          className="px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold text-xs hover:bg-emerald-700 transition"
+        >
+          Return to Scanner
+        </button>
+      </div>
+    );
+  }
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [customName, setCustomName] = useState(
     result.plant_name ? `${result.plant_name} Plant` : 'My Plant'
@@ -29,24 +43,27 @@ export default function DiagnosisResult({ result, onReset, onSaveToGarden, onNav
   const [saveError, setSaveError] = useState(null);
   const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
 
+  const diagnosisId = result.diagnosis_id || result.id || null;
+  const imageUrl = result.image_url || result.image_path || '/test_samples/sample_leaf.jpg';
   const remedy = result.remedy || {};
-  const isHealthy = result.is_healthy;
-  const confidencePercent = Math.round(result.confidence * 100);
+  const isHealthy = !!result.is_healthy;
+  const rawConfidence = Number(result.confidence) || 0;
+  const confidencePercent = Math.round(rawConfidence <= 1 ? rawConfidence * 100 : rawConfidence);
 
   const handleSaveGarden = async (e) => {
     e.preventDefault();
     setSaveError(null);
 
     const intervalVal = parseInt(wateringInterval, 10);
-    if (isNaN(intervalVal) || intervalVal < 1) {
-      setSaveError('Please enter a valid watering interval of at least 1 day.');
+    if (isNaN(intervalVal) || intervalVal < 1 || intervalVal > 60) {
+      setSaveError('Please enter a valid watering interval between 1 and 60 days.');
       return;
     }
 
     try {
       setIsSaving(true);
       await api.addPlantToGarden({
-        diagnosis_id: result.diagnosis_id,
+        diagnosis_id: diagnosisId,
         custom_name: customName.trim() || `${result.plant_name || 'Garden'} Plant`,
         plant_type: result.plant_name || 'Unknown Species',
         watering_interval_days: intervalVal,
@@ -141,7 +158,7 @@ export default function DiagnosisResult({ result, onReset, onSaveToGarden, onNav
           {/* Leaf Image Display */}
           <div className="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-200 aspect-square max-h-60 flex items-center justify-center group">
             <img
-              src={result.image_url}
+              src={imageUrl}
               alt={result.disease_name || result.plant_name}
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
               onError={(e) => {
@@ -180,7 +197,7 @@ export default function DiagnosisResult({ result, onReset, onSaveToGarden, onNav
               </span>
 
               <span className="text-xs text-slate-400 font-mono ml-auto hidden sm:inline">
-                ID: {result.diagnosis_id ? result.diagnosis_id.substring(0, 8) : 'Scan'}
+                ID: {diagnosisId ? diagnosisId.substring(0, 8) : 'Scan'}
               </span>
             </div>
 
@@ -328,7 +345,8 @@ export default function DiagnosisResult({ result, onReset, onSaveToGarden, onNav
 
           <div className="space-y-3">
             {result.top_candidates.map((cand, idx) => {
-              const candConfidence = Math.round(cand.confidence * 100);
+              const rawCandConf = Number(cand?.confidence) || 0;
+              const candConfidence = Math.round(rawCandConf <= 1 ? rawCandConf * 100 : rawCandConf);
               const isFirst = idx === 0;
 
               return (

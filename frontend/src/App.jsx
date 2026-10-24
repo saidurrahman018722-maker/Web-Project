@@ -39,10 +39,22 @@ export default function App() {
     setCurrentDiagnosis(null);
   };
 
+  const handleNavigateToScanner = () => {
+    setCurrentDiagnosis(null);
+    setActiveTab('scanner');
+  };
+
   const handleSavedToGarden = async () => {
     try {
       const alertsData = await api.getGardenAlerts();
       setAlertCount(alertsData.count || 0);
+      // Reminder worker recalculates asynchronously in background goroutine
+      setTimeout(async () => {
+        try {
+          const freshAlerts = await api.getGardenAlerts();
+          setAlertCount(freshAlerts.count || 0);
+        } catch (e) {}
+      }, 400);
     } catch (e) {}
   };
 
@@ -78,7 +90,7 @@ export default function App() {
         {/* My Garden Tab */}
         {activeTab === 'garden' && (
           <GardenTracker
-            onNavigateToScanner={() => setActiveTab('scanner')}
+            onNavigateToScanner={handleNavigateToScanner}
             onUpdateAlerts={handleSavedToGarden}
           />
         )}

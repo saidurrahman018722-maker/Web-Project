@@ -25,6 +25,7 @@ export function computeCareStatus(nextWaterDueStr) {
       label: 'On Track',
       badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
       dotClass: 'bg-emerald-500',
+      textClass: 'text-slate-800',
       description: 'Care on track',
       diffDays: 999,
     };
@@ -38,6 +39,7 @@ export function computeCareStatus(nextWaterDueStr) {
       label: 'On Track',
       badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
       dotClass: 'bg-emerald-500',
+      textClass: 'text-slate-800',
       description: 'Care on track',
       diffDays: 999,
     };
@@ -56,6 +58,7 @@ export function computeCareStatus(nextWaterDueStr) {
       label: 'Overdue',
       badgeClass: 'bg-red-100 text-red-800 border-red-300',
       dotClass: 'bg-red-500',
+      textClass: 'text-red-600',
       description: `${late} day${late > 1 ? 's' : ''} overdue`,
       diffDays,
     };
@@ -65,6 +68,7 @@ export function computeCareStatus(nextWaterDueStr) {
       label: 'Due Today',
       badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
       dotClass: 'bg-amber-500',
+      textClass: 'text-amber-600',
       description: 'Needs water today',
       diffDays,
     };
@@ -74,6 +78,7 @@ export function computeCareStatus(nextWaterDueStr) {
       label: 'On Track',
       badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
       dotClass: 'bg-emerald-500',
+      textClass: 'text-slate-800',
       description: `Water in ${diffDays} day${diffDays > 1 ? 's' : ''}`,
       diffDays,
     };
@@ -116,11 +121,12 @@ export default function GardenTracker({ onNavigateToScanner, onUpdateAlerts }) {
   const [plants, setPlants] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [actionError, setActionError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, overdue, due_today, on_track
   
-  // Action state tracking
-  const [wateringId, setWateringId] = useState(null);
+  // Action state tracking per-plant
+  const [wateringMap, setWateringMap] = useState({});
   const [waterSuccessMap, setWaterSuccessMap] = useState({});
   const [deletingId, setDeletingId] = useState(null);
   const [plantToDelete, setPlantToDelete] = useState(null);
@@ -145,8 +151,11 @@ export default function GardenTracker({ onNavigateToScanner, onUpdateAlerts }) {
 
   // Water plant handler
   const handleWaterPlant = async (plant) => {
+    if (wateringMap[plant.id]) return; // Guard rapid double clicks
+
     try {
-      setWateringId(plant.id);
+      setActionError(null);
+      setWateringMap((prev) => ({ ...prev, [plant.id]: true }));
       const res = await api.waterPlant(plant.id);
 
       // Update local state with new timestamps from server response
@@ -169,14 +178,15 @@ export default function GardenTracker({ onNavigateToScanner, onUpdateAlerts }) {
         setWaterSuccessMap((prev) => ({ ...prev, [plant.id]: false }));
       }, 3000);
 
-      // Refresh global alerts counter in Navbar
+      // Refresh global alerts counter in Navbar (immediate + delayed for worker settlement)
       if (onUpdateAlerts) {
         onUpdateAlerts();
+        setTimeout(onUpdateAlerts, 400);
       }
     } catch (err) {
-      alert('Failed to water plant: ' + (err.response?.data?.error || err.message));
+      setActionError('Failed to water plant: ' + (err.response?.data?.error || err.message));
     } finally {
-      setWateringId(null);
+      setWateringMap((prev) => ({ ...prev, [plant.id]: false }));
     }
   };
 
@@ -185,6 +195,7 @@ export default function GardenTracker({ onNavigateToScanner, onUpdateAlerts }) {
     if (!plantToDelete) return;
 
     try {
+      setActionError(null);
       setDeletingId(plantToDelete.id);
       await api.deleteGardenPlant(plantToDelete.id);
 
@@ -195,9 +206,10 @@ export default function GardenTracker({ onNavigateToScanner, onUpdateAlerts }) {
       // Refresh global alerts
       if (onUpdateAlerts) {
         onUpdateAlerts();
+        setTimeout(onUpdateAlerts, 400);
       }
     } catch (err) {
-      alert('Failed to delete plant: ' + (err.response?.data?.error || err.message));
+      setActionError('Failed to remove plant: ' + (err.response?.data?.error || err.message));
     } finally {
       setDeletingId(null);
     }
@@ -225,14 +237,17 @@ export default function GardenTracker({ onNavigateToScanner, onUpdateAlerts }) {
     };
   }, [plants]);
 
-  // Filtered plants list
+  // Filtered plants list (nickname, species, notes, or disease)
   const filteredPlants = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
     return plants.filter((plant) => {
       // Search filter
       const matchesSearch =
-        (plant.custom_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (plant.plant_type || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (plant.notes || '').toLowerCase().includes(searchQuery.toLowerCase());
+        !q ||
+        (plant.custom_name || '').toLowerCase().includes(q) ||
+        (plant.plant_type || '').toLowerCase().includes(q) ||
+        (plant.notes || '').toLowerCase().includes(q) ||
+        (plant.diagnosis?.disease_name || '').toLowerCase().includes(q);
 
       if (!matchesSearch) return false;
 
@@ -351,6 +366,22 @@ export default function GardenTracker({ onNavigateToScanner, onUpdateAlerts }) {
             className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition flex-shrink-0"
           >
             Show Overdue
+          </button>
+        </div>
+      )}
+
+      {/* Action Error Banner (if any) */}
+      {actionError && (
+        <div className="p-4 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-between gap-3 text-red-700 text-xs animate-in fade-in duration-150">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-600" />
+            <span>{actionError}</span>
+          </div>
+          <button
+            onClick={() => setActionError(null)}
+            className="text-red-700 hover:text-red-900 font-bold text-sm px-2 py-0.5 rounded"
+          >
+            &times;
           </button>
         </div>
       )}
@@ -487,7 +518,7 @@ export default function GardenTracker({ onNavigateToScanner, onUpdateAlerts }) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredPlants.map((plant) => {
             const careStatus = computeCareStatus(plant.next_water_due);
-            const isWatering = wateringId === plant.id;
+            const isWatering = !!wateringMap[plant.id];
             const isJustWatered = !!waterSuccessMap[plant.id];
             const hasDiagnosis = !!plant.diagnosis;
 
@@ -505,9 +536,9 @@ export default function GardenTracker({ onNavigateToScanner, onUpdateAlerts }) {
                       {/* Thumbnail or Plant Icon */}
                       <div className="flex items-center gap-3">
                         <div className="relative w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                          {hasDiagnosis && plant.diagnosis.image_path ? (
+                          {hasDiagnosis && (plant.diagnosis.image_path || plant.diagnosis.image_url) ? (
                             <img
-                              src={plant.diagnosis.image_path}
+                              src={plant.diagnosis.image_path || plant.diagnosis.image_url}
                               alt={plant.custom_name}
                               className="w-full h-full object-cover"
                               onError={(e) => {
@@ -581,7 +612,7 @@ export default function GardenTracker({ onNavigateToScanner, onUpdateAlerts }) {
                       <span className="flex items-center gap-1.5 text-slate-600">
                         <Calendar className="w-3.5 h-3.5 text-emerald-500" /> Next Water Due
                       </span>
-                      <span className={`font-bold ${careStatus.key === 'overdue' ? 'text-red-600' : 'text-slate-800'}`}>
+                      <span className={`font-bold ${careStatus.textClass}`}>
                         {formatCareDate(plant.next_water_due)}
                         <span className="text-[10px] ml-1 font-normal text-slate-500">
                           ({careStatus.description})
