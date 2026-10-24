@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import LeafScanner from './components/LeafScanner';
 import DiagnosisResult from './components/DiagnosisResult';
+import GardenTracker from './components/GardenTracker';
 import { api } from './services/api';
 import { Sprout, History, BookOpen } from 'lucide-react';
 
@@ -68,28 +69,18 @@ export default function App() {
                 result={currentDiagnosis}
                 onReset={handleResetScanner}
                 onSaveToGarden={handleSavedToGarden}
+                onNavigateToGarden={() => setActiveTab('garden')}
               />
             )}
           </div>
         )}
 
-        {/* My Garden Tab Placeholder (Next Milestone) */}
+        {/* My Garden Tab */}
         {activeTab === 'garden' && (
-          <div className="max-w-4xl mx-auto bg-white rounded-2xl p-10 border border-slate-200 text-center space-y-4 shadow-sm">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-inner">
-              <Sprout className="w-8 h-8" />
-            </div>
-            <h2 className="text-2xl font-extrabold text-slate-900">My Garden Care Tracker</h2>
-            <p className="text-slate-600 max-w-md mx-auto text-sm">
-              Your personalized garden dashboard is getting wired up for the upcoming milestone. You can already diagnose leaves and track watering intervals in the database!
-            </p>
-            <button
-              onClick={() => setActiveTab('scanner')}
-              className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition"
-            >
-              Scan a Plant to Add
-            </button>
-          </div>
+          <GardenTracker
+            onNavigateToScanner={() => setActiveTab('scanner')}
+            onUpdateAlerts={handleSavedToGarden}
+          />
         )}
 
         {/* History Tab Placeholder (Next Milestone) */}
